@@ -235,6 +235,70 @@ describe('createStellarBillClient - headers and auth', () => {
     expect(headers['authorization']).toBeUndefined();
   });
 
+  it('#945 rejects auth header when token is empty string (falsy t branch)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'valid-token',
+      fetch,
+    });
+    sdk.setToken('');
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+  });
+
+  it('#945 rejects auth header when token is whitespace only (falsy t branch)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'valid-token',
+      fetch,
+    });
+    sdk.setToken('   ');
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+  });
+
+  it('#946 boundary: token at minimum valid length (1 char) sets auth header', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'x',
+      fetch,
+    });
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBe('Bearer x');
+  });
+
+  it('#946 boundary: token with leading/trailing whitespace is trimmed and accepted', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: '  trimmed-token  ',
+      fetch,
+    });
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBe('Bearer trimmed-token');
+  });
+
+  it('#947 accepted input: valid token sets auth header and returns request', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'accepted-token',
+      fetch,
+    });
+    const result = await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBe('Bearer accepted-token');
+    expect(result.status).toBe(200);
+    expect(result.data?.status).toBe('ok');
+  });
+
   it('runs user-supplied middleware around the auth middleware', async () => {
     const order: string[] = [];
     let bearerSeen = false;
@@ -446,6 +510,35 @@ describe('createStellarBillClient - error paths (non-2xx)', () => {
       status: 500,
       body: undefined,
     });
+  });
+
+  it('#959 accepted input: parsedError body is passed to StellarBillError when throwOnError', async () => {
+    const { fetch } = mockFetchOnce(
+      { error: 'Bad Request', message: 'Invalid cursor', code: 'invalid_cursor', details: { field: 'cursor' } },
+      { status: 400 },
+    );
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+    let caught: StellarBillError | undefined;
+    try {
+      await sdk.listPlans({ limit: 999 });
+    } catch (err) {
+      caught = err as StellarBillError;
+    }
+    expect(caught).toBeInstanceOf(StellarBillError);
+    expect(caught!.status).toBe(400);
+    expect(caught!.body).toEqual(
+      expect.objectContaining({
+        code: 'invalid_cursor',
+        message: 'Invalid cursor',
+        details: { field: 'cursor' },
+      }),
+    );
+    expect(caught!.requestMethod).toBe('GET');
+    expect(caught!.requestUrl).toContain('/api/v1/plans');
   });
 });
 
