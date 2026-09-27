@@ -94,6 +94,15 @@ describe('createStellarBillClient - configuration', () => {
     expect(() => createStellarBillClient({ baseUrl: undefined as unknown as string })).toThrow(
       StellarBillConfigError,
     );
+    expect(() => createStellarBillClient({ baseUrl: null as unknown as string })).toThrow(
+      /baseUrl is required/
+    );
+    expect(() => createStellarBillClient({ baseUrl: 123 as unknown as string })).toThrow(
+      /non-empty string/
+    );
+    expect(() => createStellarBillClient({ baseUrl: {} as unknown as string })).toThrow(
+      /non-empty string/
+    );
     expect(() => createStellarBillClient({ baseUrl: '' })).toThrow(/non-empty/);
     expect(() => createStellarBillClient({ baseUrl: '   ' })).toThrow(/non-empty/);
     expect(() => createStellarBillClient({ baseUrl: 'not-a-url' })).toThrow(/not a valid URL/);
