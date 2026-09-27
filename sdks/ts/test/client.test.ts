@@ -310,6 +310,19 @@ describe('createStellarBillClient - typed wrappers (success paths)', () => {
     expect(r.requestUrl).toContain('/api/health');
   });
 
+  it('does not throw when throwOnError: true and status is 2xx', async () => {
+    const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+    const r = await sdk.getHealth();
+    expect(r.status).toBe(200);
+    expect(r.error).toBeUndefined();
+    expect(r.data?.status).toBe('ok');
+  });
+
   it('listPlans forwards cursor and limit', async () => {
     const { fetch, calls } = mockFetchOnce({ plans: [{ id: 'p1' }], pagination: { has_more: false } });
     const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
