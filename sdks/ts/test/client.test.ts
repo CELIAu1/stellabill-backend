@@ -184,6 +184,20 @@ describe('createStellarBillClient - headers and auth', () => {
     expect(headers['authorization']).toBeUndefined();
   });
 
+  it('omits Authorization when the token is only whitespace', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: ' \t\n ',
+      fetch,
+    });
+
+    await sdk.getHealth();
+
+    expect(calls).toHaveLength(1);
+    expect(callHeaders(calls[0]!)['authorization']).toBeUndefined();
+  });
+
   it('setToken rotates the token; subsequent calls use the new one', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', token: 'old', fetch });
