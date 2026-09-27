@@ -143,12 +143,15 @@ describe('createStellarBillClient - configuration', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('strips trailing slashes from baseUrl', async () => {
+  it('accepts a baseUrl with trailing slashes and resolves requests against it', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com///', fetch });
-    await sdk.getHealth();
-    expect(calls[0]!.url.startsWith('https://api.example.com/api/health')).toBe(true);
-    expect(calls[0]!.url).not.toContain('///api');
+
+    const result = await sdk.getHealth();
+
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual({ status: 'ok', service: 'stellarbill-backend' });
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
   });
 
   it('strips trailing slashes from baseUrl including port variants', async () => {
