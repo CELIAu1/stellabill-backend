@@ -435,6 +435,52 @@ describe('createStellarBillClient - error paths (non-2xx)', () => {
     expect(e.body?.code).toBe('missing');
   });
 
+  it('rejects an invalid cursor with the request and actionable API error details', async () => {
+    const body = { error: 'Bad Request', message: 'Invalid cursor', code: 'invalid_cursor' };
+    const { fetch, calls } = mockFetchOnce(body, { status: 400 });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'sdk-token',
+      throwOnError: true,
+      fetch,
+    });
+
+    let caught: unknown;
+    try {
+      await sdk.listPlans({ cursor: 'bad cursor' });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0]!.url).searchParams.get('cursor')).toBe('bad cursor');
+    expect(callHeaders(calls[0]!)['authorization']).toBe('Bearer sdk-token');
+    expect(caught).toBeInstanceOf(StellarBillError);
+    const rejected = caught as StellarBillError;
+    expect(rejected).toMatchObject({
+      status: 400,
+      body,
+      requestMethod: 'GET',
+      requestUrl: '/api/v1/plans',
+      message: 'GET /api/v1/plans failed (400): Invalid cursor',
+    });
+    expect(rejected.message).not.toContain('sdk-token');
+  });
+
+  it('returns a successful plans response when throwOnError is enabled', async () => {
+    const { fetch } = mockFetchOnce({ plans: [], pagination: { has_more: false } });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+
+    const result = await sdk.listPlans({ cursor: 'valid' });
+    expect(result.status).toBe(200);
+    expect(result.error).toBeUndefined();
+    expect(result.data?.plans).toEqual([]);
+  });
+
   it('non-2xx with non-JSON content returns undefined error body', async () => {
     const { fetch } = mockFetchOnce('<html>nope</html>', { status: 500, contentType: 'text/html' });
     const sdk = createStellarBillClient({
