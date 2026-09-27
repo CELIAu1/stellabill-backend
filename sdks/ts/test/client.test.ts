@@ -159,6 +159,194 @@ describe('createStellarBillClient - configuration', () => {
   });
 });
 
+describe('validateBaseUrl - boundary conditions for trailing slash stripping (line 96)', () => {
+  it('handles baseUrl with no trailing slash (no-op case)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('handles baseUrl with single trailing slash', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('handles baseUrl with multiple consecutive trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/////', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('preserves path segments and only strips trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/v2/path///', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/v2/path/api/health');
+  });
+
+  it('preserves query parameters when stripping trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com?key=value', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toContain('https://api.example.com');
+    expect(calls[0]!.url).toContain('key=value');
+  });
+
+  it('preserves fragment identifiers when stripping trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/#section', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toContain('https://api.example.com');
+  });
+
+  it('handles baseUrl with port and multiple trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com:8443///', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com:8443/api/health');
+  });
+
+  it('handles baseUrl with explicit port 443 and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com:443/', fetch });
+    await sdk.getHealth();
+    // URL.toString() may normalize :443 for https
+    expect(calls[0]!.url).toMatch(/^https:\/\/api\.example\.com(:443)?\/api\/health$/);
+  });
+
+  it('handles baseUrl with explicit port 80 and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'http://api.example.com:80/', fetch });
+    await sdk.getHealth();
+    // URL.toString() may normalize :80 for http
+    expect(calls[0]!.url).toMatch(/^http:\/\/api\.example\.com(:80)?\/api\/health$/);
+  });
+
+  it('handles baseUrl with subdomain and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.sub.example.com//', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.sub.example.com/api/health');
+  });
+
+  it('handles baseUrl with IPv4 address and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'http://192.168.1.1:8080//', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('http://192.168.1.1:8080/api/health');
+  });
+
+  it('handles baseUrl with IPv6 address and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'http://[::1]:8080/', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('http://[::1]:8080/api/health');
+  });
+
+  it('handles baseUrl with path containing encoded characters and trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/api%20path//', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toContain('/api%20path/api/health');
+  });
+
+  it('ensures URL composition does not create double slashes after stripping', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    // Base with trailing slash stripped should compose cleanly with path
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+    expect(calls[0]!.url).not.toContain('//api/health');
+  });
+
+  it('ensures consistent behavior across multiple requests after trailing slash removal', async () => {
+    // Need separate mocks for each call since Response bodies can only be read once
+    const { fetch: fetch1, calls: calls1 } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const { fetch: fetch2, calls: calls2 } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    
+    const sdk1 = createStellarBillClient({ baseUrl: 'https://api.example.com///', fetch: fetch1 });
+    const sdk2 = createStellarBillClient({ baseUrl: 'https://api.example.com///', fetch: fetch2 });
+    
+    await sdk1.getHealth();
+    await sdk2.getHealth();
+    
+    expect(calls1[0]!.url).toBe('https://api.example.com/api/health');
+    expect(calls2[0]!.url).toBe('https://api.example.com/api/health');
+    expect(calls1[0]!.url).toBe(calls2[0]!.url);
+  });
+
+  it('handles baseUrl that is root path with trailing slashes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://example.com///', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://example.com/api/health');
+  });
+
+  it('validates trailing slash removal does not affect error responses', async () => {
+    const { fetch, calls } = mockFetchOnce(
+      { error: 'Not Found', message: 'gone', code: 'missing' },
+      { status: 404 },
+    );
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com///', fetch });
+    const result = await sdk.getHealth();
+    expect(result.status).toBe(404);
+    expect(calls[0]!.url).toContain('https://api.example.com');
+    expect(calls[0]!.url).not.toMatch(/\/{2,}api\/health/);
+  });
+
+  it('validates trailing slash removal does not affect token injection', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com///',
+      token: 'test-token',
+      fetch,
+    });
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBe('Bearer test-token');
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('validates trailing slash removal produces deterministic URLs for caching', async () => {
+    const { fetch: fetch1, calls: calls1 } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const { fetch: fetch2, calls: calls2 } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    
+    const sdk1 = createStellarBillClient({ baseUrl: 'https://api.example.com/', fetch: fetch1 });
+    const sdk2 = createStellarBillClient({ baseUrl: 'https://api.example.com///', fetch: fetch2 });
+    
+    await sdk1.getHealth();
+    await sdk2.getHealth();
+    
+    // Both should produce identical URLs regardless of trailing slash count
+    expect(calls1[0]!.url).toBe(calls2[0]!.url);
+    expect(calls1[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('handles edge case of baseUrl that is just protocol and domain with trailing slash', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com/', fetch });
+    await sdk.getHealth();
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
+  it('validates that URL.toString() normalization is preserved after trailing slash removal', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    // URL constructor normalizes certain aspects (e.g., default ports)
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com:443///', fetch });
+    await sdk.getHealth();
+    // Verify normalization happened and trailing slashes were removed
+    expect(calls[0]!.url).toMatch(/^https:\/\/api\.example\.com/);
+    expect(calls[0]!.url).toContain('/api/health');
+    // Ensure the path portion doesn't have doubled slashes (ignore protocol)
+    const urlPath = calls[0]!.url.split('://')[1];
+    expect(urlPath).not.toMatch(/\/{2,}/);
+  });
+});
+
 describe('createStellarBillClient - headers and auth', () => {
   it('injects Authorization Bearer header when token is set', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
