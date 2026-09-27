@@ -235,6 +235,108 @@ describe('createStellarBillClient - headers and auth', () => {
     expect(headers['authorization']).toBeUndefined();
   });
 
+  // ---- boundary conditions for the header-skip branch (authMiddleware line 196) ----
+  // Branch: if (!request.headers.has(k) && typeof v === 'string' && v.length > 0)
+  //
+  // Condition 1 — skip-if-present (!request.headers.has(k)):
+  //   When the Request already carries the header, authMiddleware MUST leave it
+  //   unchanged.  The SDK exposes `sdk.raw` so callers can drive openapi-fetch
+  //   directly with per-call `headers`; those headers are placed on the Request
+  //   object *before* middleware fires, which makes them the "pre-existing" header
+  //   that the branch guards against overwriting.
+
+  it('does not overwrite a header that is already present on the Request (skip-if-present)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      // SDK-level static header — goes into extraHeaders and would be set by authMiddleware
+      // if the header is absent from the request.
+      headers: { 'x-tenant-id': 'sdk-level-tenant' },
+      fetch,
+    });
+
+    // Drive the raw openapi-fetch client with a per-call header that has the
+    // SAME key.  openapi-fetch places per-call headers on the Request object
+    // before running middleware, so authMiddleware sees the header as already
+    // present and must NOT overwrite it.
+    await sdk.raw.GET('/api/health', {
+      headers: { 'x-tenant-id': 'per-call-tenant' },
+    });
+
+    const headers = callHeaders(calls[0]!);
+    // The per-call value must win; the SDK-level static value must NOT replace it.
+    expect(headers['x-tenant-id']).toBe('per-call-tenant');
+  });
+
+  it('injects a static header when it is absent from the Request (skip-if-present, false branch)', async () => {
+    // Mirrors the previous test for the other arm of the branch: when no
+    // per-call header is provided the middleware MUST inject the SDK-level value.
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      headers: { 'x-tenant-id': 'sdk-level-tenant' },
+      fetch,
+    });
+
+    // No per-call override — header is absent from the Request when middleware runs.
+    await sdk.raw.GET('/api/health', {});
+
+    const headers = callHeaders(calls[0]!);
+    expect(headers['x-tenant-id']).toBe('sdk-level-tenant');
+  });
+
+  it('does not overwrite user-agent when it is already set on the Request', async () => {
+    // The user-agent guard uses the same !request.headers.has pattern at the
+    // top of onRequest.  A per-call user-agent header triggers that branch.
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      fetch,
+    });
+
+    await sdk.raw.GET('/api/health', {
+      headers: { 'user-agent': 'custom-agent/1.0' },
+    });
+
+    const headers = callHeaders(calls[0]!);
+    expect(headers['user-agent']).toBe('custom-agent/1.0');
+  });
+
+  it('multiple static headers — only absent ones are injected, present ones are preserved', async () => {
+    // Tests that the skip-if-present guard applies independently per header key:
+    // one header is pre-set (must be preserved), another is absent (must be injected).
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      headers: {
+        'x-correlation-id': 'sdk-correlation',
+        'x-tenant-id': 'sdk-tenant',
+      },
+      fetch,
+    });
+
+    // Only x-correlation-id is pre-set via per-call headers.
+    await sdk.raw.GET('/api/health', {
+      headers: { 'x-correlation-id': 'per-call-correlation' },
+    });
+
+    const headers = callHeaders(calls[0]!);
+    // Pre-set header must be preserved.
+    expect(headers['x-correlation-id']).toBe('per-call-correlation');
+    // Absent header must be injected from extraHeaders.
+    expect(headers['x-tenant-id']).toBe('sdk-tenant');
+  });
+
+  // Condition 3 — non-empty value guard (v.length > 0) at the middleware level:
+  //   An empty-valued entry cannot reach extraHeaders (it is filtered at the
+  //   options.headers normalization step), so the only way to exercise the
+  //   middleware-level v.length guard would require bypassing normalization.
+  //   The guard is therefore covered implicitly: the existing 'skips
+  //   empty-valued static headers' test confirms empty values never enter
+  //   extraHeaders, making the in-loop check a defence-in-depth that cannot
+  //   be reached via the public API.  These comments document the boundary
+  //   so future refactors don't accidentally remove the redundant guard.
+
   it('runs user-supplied middleware around the auth middleware', async () => {
     const order: string[] = [];
     let bearerSeen = false;
