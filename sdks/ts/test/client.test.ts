@@ -269,6 +269,63 @@ describe('createStellarBillClient - headers and auth', () => {
   });
 });
 
+describe('createStellarBillClient - authMiddleware accepted input (issue #941)', () => {
+  it('success path: accepts a valid token, injects Bearer header, and preserves the documented result', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'valid-token-123',
+      fetch,
+    });
+    const r = await sdk.getHealth();
+    // Branch taken: Authorization injected alongside the other middleware headers.
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBe('Bearer valid-token-123');
+    expect(headers['user-agent']).toMatch(/^@stellabill\/sdk\//);
+    // Documented result behavior is preserved end-to-end.
+    expect(r.status).toBe(200);
+    expect(r.error).toBeUndefined();
+    expect(r.data?.status).toBe('ok');
+    expect(r.requestMethod).toBe('GET');
+    expect(r.requestUrl).toContain('/api/health');
+  });
+
+  it('success path: accepts a token rotated via setToken on the next request', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'initial-token',
+      fetch,
+    });
+    sdk.setToken('rotated-token');
+    await sdk.getHealth();
+    expect(callHeaders(calls[0]!)['authorization']).toBe('Bearer rotated-token');
+  });
+
+  it('failure path: absent token leaves Authorization unset and the request still completes', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+    const r = await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+    expect(headers['user-agent']).toMatch(/^@stellabill\/sdk\//);
+    expect(r.status).toBe(200);
+    expect(r.data?.status).toBe('ok');
+  });
+
+  it('failure path: malformed token (internal whitespace) never reaches the Authorization branch', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'bad token',
+      fetch,
+    });
+    const r = await sdk.getHealth();
+    expect(callHeaders(calls[0]!)['authorization']).toBeUndefined();
+    expect(r.status).toBe(200);
+  });
+});
+
 describe('createStellarBillClient - typed wrappers (success paths)', () => {
   it('getHealth returns parsed data', async () => {
     const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
