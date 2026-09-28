@@ -136,6 +136,17 @@ describe('createStellarBillClient - configuration', () => {
     }
   });
 
+  it('throws StellarBillConfigError when provided fetch is not a function (rejected input)', () => {
+    // Pass an explicitly invalid `fetch` value to exercise the rejection branch
+    // in createStellarBillClient that checks `typeof providedFetch !== 'function'`.
+    // Use a value that might commonly be passed by mistake (string).
+    // The API should reject deterministically with a config error.
+    // @ts-expect-error: intentionally passing invalid type for test
+    expect(() => createStellarBillClient({ baseUrl: 'https://api.example.com', fetch: 'not-a-function' })).toThrow(
+      StellarBillConfigError,
+    );
+  });
+
   it('accepts an explicit fetch option', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
