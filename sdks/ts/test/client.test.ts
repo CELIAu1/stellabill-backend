@@ -543,6 +543,26 @@ describe('safeParseErrorBody', () => {
     expect(await safeParseErrorBody(r)).toEqual({ message: 'bad', code: 'x' });
   });
 
+  it('accepts and returns parsed object when valid ApiErrorBody (line 115 branch)', async () => {
+    // This test specifically exercises the accepted input branch at line 115:
+    // if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+    // It verifies that valid objects with error fields are accepted and returned.
+    const errorBody = {
+      error: 'Bad Request',
+      message: 'Invalid input provided',
+      code: 'validation_error',
+    };
+    const r = new Response(JSON.stringify(errorBody), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
+    const result = await safeParseErrorBody(r);
+    expect(result).toEqual(errorBody);
+    expect(result?.error).toBe('Bad Request');
+    expect(result?.message).toBe('Invalid input provided');
+    expect(result?.code).toBe('validation_error');
+  });
+
   it('returns undefined on invalid JSON', async () => {
     const r = new Response('not-json', { status: 400, headers: { 'content-type': 'application/json' } });
     expect(await safeParseErrorBody(r)).toBeUndefined();
