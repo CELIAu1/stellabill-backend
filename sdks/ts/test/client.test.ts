@@ -564,6 +564,24 @@ describe('safeParseErrorBody', () => {
     vi.spyOn(r, 'text').mockRejectedValue(new Error('boom'));
     expect(await safeParseErrorBody(r)).toBeUndefined();
   });
+
+  it('returns undefined when JSON.parse() throws on valid text content', async () => {
+    // This test ensures the catch block (line 119) handles JSON.parse errors gracefully.
+    // We spy on JSON.parse to simulate a parsing error and verify the function
+    // returns undefined instead of throwing.
+    const r = new Response('{"message":"test"}', {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
+    vi.spyOn(JSON, 'parse').mockImplementation(() => {
+      throw new SyntaxError('Unexpected token');
+    });
+    try {
+      expect(await safeParseErrorBody(r)).toBeUndefined();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe('Token integration with createStellarBillClient', () => {
