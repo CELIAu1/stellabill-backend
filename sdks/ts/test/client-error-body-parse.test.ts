@@ -120,7 +120,11 @@ describe('safeParseErrorBody - non-object JSON collapses to undefined', () => {
 
 describe('safeParseErrorBody - guards short-circuiting before the branch', () => {
   it('returns undefined when the content-type header is absent', async () => {
+    // `new Response(string)` auto-sets `text/plain;charset=UTF-8` on Node 20+,
+    // so the header must be removed explicitly to exercise the missing-header
+    // path (`res.headers.get('content-type') ?? ''`).
     const res = new Response('{"message":"m"}', { status: 400 });
+    res.headers.delete('content-type');
     expect(res.headers.get('content-type')).toBeNull();
     expect(await safeParseErrorBody(res)).toBeUndefined();
   });
