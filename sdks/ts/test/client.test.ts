@@ -449,6 +449,92 @@ describe('createStellarBillClient - error paths (non-2xx)', () => {
   });
 });
 
+describe('createStellarBillClient - documented error-handling pattern (client.ts:142)', () => {
+  // Line 142 of src/client.ts is the `if (error) throw new Error(error.message);`
+  // guard inside the `@example` JSDoc on `createStellarBillClient`, which
+  // documents how consumers handle the `SdkResult` returned by every public
+  // wrapper (the example itself uses `sdk.getHealth()`). These tests execute
+  // that exact pattern against the public API surface so both branches of the
+  // documented example stay observable and stable. Mocked fetch only — no
+  // network, fully deterministic.
+
+  /** HealthResponse example values from openapi/openapi.yaml. */
+  const VALID_HEALTH_BODY = { status: 'ok', service: 'stellarbill-backend' } as const;
+
+  it('accepted input: no throw and documented result when error is absent', async () => {
+    const { fetch } = mockFetchOnce(VALID_HEALTH_BODY);
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+
+    const { data, error, status, requestMethod, requestUrl } = await sdk.getHealth();
+
+    // Accepted-input branch of the documented pattern: the guard is a no-op
+    // when `error` is absent.
+    expect(error).toBeUndefined();
+    const documentedPattern = () => {
+      if (error) throw new Error(error.message);
+      return data;
+    };
+    expect(documentedPattern).not.toThrow();
+
+    // The result is the documented shape/value, not merely "didn't throw":
+    // full HealthResponse body plus the SdkResult envelope fields.
+    expect(data).toEqual({ status: 'ok', service: 'stellarbill-backend' });
+    expect(status).toBe(200);
+    expect(requestMethod).toBe('GET');
+    expect(requestUrl).toContain('/api/health');
+  });
+
+  it('error path: throws an Error whose message is exactly error.message', async () => {
+    const { fetch } = mockFetchOnce(
+      { error: 'Bad Request', message: 'Invalid cursor', code: 'invalid_cursor' },
+      { status: 400 },
+    );
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+
+    const { error } = await sdk.getHealth();
+    expect(error).toBeDefined();
+    expect(error?.message).toBe('Invalid cursor');
+
+    let caught: unknown;
+    try {
+      // The documented pattern (client.ts:142), verbatim.
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    // The example deliberately throws the platform Error (throw-on-error via
+    // `throwOnError`/`assertOk` throws StellarBillError instead) — the message
+    // must be propagated verbatim, not swallowed or replaced.
+    expect(caught).not.toBeInstanceOf(StellarBillError);
+    expect((caught as Error).message).toBe('Invalid cursor');
+  });
+
+  it('boundary: error present without message propagates as an empty-string message', async () => {
+    // `ApiErrorBody.message` is optional, so an envelope carrying only
+    // `error` is type-legal and reaches this branch in practice (e.g. a
+    // proxy-generated 5xx body). The falsy-error variants (0/"") are not
+    // type-legal here and are deliberately not covered.
+    const { fetch } = mockFetchOnce({ error: 'Service Unavailable' }, { status: 503 });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+
+    const { error } = await sdk.getHealth();
+    expect(error).toBeDefined();
+    expect(error?.message).toBeUndefined();
+
+    let caught: unknown;
+    try {
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      caught = err;
+    }
+    // `new Error(undefined)` normalizes to an empty message: the documented
+    // example never crashes on a message-less envelope.
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe('');
+  });
+});
+
 describe('createStellarBillClient - warning path coverage', () => {
   it('does not crash when console is fully unavailable', async () => {
     const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
