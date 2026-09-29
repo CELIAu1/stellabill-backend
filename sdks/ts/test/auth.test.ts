@@ -11,6 +11,10 @@ describe('sanitizeToken', () => {
     expect(sanitizeToken({} as unknown as string)).toBeUndefined();
     expect(sanitizeToken(null as unknown as string)).toBeUndefined();
   });
+  it('accepts a primitive string but rejects a boxed string object', () => {
+    expect(sanitizeToken('abc')).toBe('abc');
+    expect(sanitizeToken(new String('abc') as unknown as string)).toBeUndefined();
+  });
   it('returns undefined for empty string after trim', () => {
     expect(sanitizeToken('')).toBeUndefined();
     expect(sanitizeToken('   ')).toBeUndefined();
