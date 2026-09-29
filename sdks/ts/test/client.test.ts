@@ -145,6 +145,35 @@ describe('createStellarBillClient - configuration', () => {
     }
   });
 
+  it('safely handles and rejects invalid input during isLocalhost URL parsing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    
+    const OriginalURL = globalThis.URL;
+    try {
+      let callCount = 0;
+      globalThis.URL = class extends OriginalURL {
+        constructor(url: string | URL, base?: string | URL) {
+          if (callCount++ === 1) {
+            // Throw on the second call (inside isLocalhost)
+            throw new TypeError('Simulated invalid URL parsing in isLocalhost');
+          }
+          super(url, base);
+        }
+      } as any;
+
+      const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+      // We pass http://localhost so it would normally NOT warn.
+      // But because URL throws inside isLocalhost, the catch block returns false,
+      // which triggers the warning, giving us a stable observable behavior.
+      const sdk = createStellarBillClient({ baseUrl: 'http://localhost', fetch });
+      await sdk.getHealth();
+      
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Insecure baseUrl'));
+    } finally {
+      globalThis.URL = OriginalURL;
+    }
+  });
+
   it('throws StellarBillConfigError when no fetch implementation is available', () => {
     const saved = (globalThis as { fetch?: unknown }).fetch;
     (globalThis as { fetch?: unknown }).fetch = undefined;
