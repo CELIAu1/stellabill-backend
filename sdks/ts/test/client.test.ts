@@ -544,7 +544,11 @@ describe('createStellarBillClient - headers and auth', () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({
       baseUrl: 'https://api.example.com',
-      headers: { Authorization: 'Bearer attacker-controlled' },
+      headers: {
+        Authorization: 'Bearer attacker-controlled-1',
+        authorization: 'Bearer attacker-controlled-2',
+        AUTHORIZATION: 'Bearer attacker-controlled-3',
+      },
       fetch,
     });
     await sdk.getHealth();
