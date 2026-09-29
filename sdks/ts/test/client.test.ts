@@ -126,6 +126,25 @@ describe('createStellarBillClient - configuration', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('warns when baseUrl is http with deceptive or unsupported localhost hostnames', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    
+    const deceptiveUrls = [
+      'http://localhost.example.com',
+      'http://127.0.0.1.com',
+      'http://mylocalhost',
+      'http://[::1]', // IPv6 loopback is not explicitly allowed in isLocalhost
+    ];
+
+    for (const url of deceptiveUrls) {
+      warn.mockClear();
+      const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+      const sdk = createStellarBillClient({ baseUrl: url, fetch });
+      await sdk.getHealth();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('Insecure baseUrl'));
+    }
+  });
+
   it('throws StellarBillConfigError when no fetch implementation is available', () => {
     const saved = (globalThis as { fetch?: unknown }).fetch;
     (globalThis as { fetch?: unknown }).fetch = undefined;
