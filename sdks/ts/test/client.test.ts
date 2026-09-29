@@ -367,6 +367,33 @@ describe('createStellarBillClient - headers and auth', () => {
       token: 'bad token',
       fetch,
     });
+    expect(sdk.getToken()).toBeUndefined();
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+  });
+
+  it('drops malformed token (tab inside)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'bad\ttoken',
+      fetch,
+    });
+    expect(sdk.getToken()).toBeUndefined();
+    await sdk.getHealth();
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+  });
+
+  it('drops malformed token (newline inside)', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 'bad\ntoken',
+      fetch,
+    });
+    expect(sdk.getToken()).toBeUndefined();
     await sdk.getHealth();
     const headers = callHeaders(calls[0]!);
     expect(headers['authorization']).toBeUndefined();
@@ -378,6 +405,8 @@ describe('createStellarBillClient - headers and auth', () => {
     expect(sdk.getToken()).toBe('old');
     sdk.setToken('new');
     expect(sdk.getToken()).toBe('new');
+    sdk.setToken('bad token');
+    expect(sdk.getToken()).toBeUndefined();
     sdk.setToken(undefined);
     expect(sdk.getToken()).toBeUndefined();
     await sdk.getHealth();

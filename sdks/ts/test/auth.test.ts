@@ -18,6 +18,9 @@ describe('sanitizeToken', () => {
   it('returns undefined when trimmed string still contains whitespace', () => {
     expect(sanitizeToken('a b')).toBeUndefined();
     expect(sanitizeToken('a b c')).toBeUndefined();
+    expect(sanitizeToken('a\tb')).toBeUndefined();
+    expect(sanitizeToken('a\nb')).toBeUndefined();
+    expect(sanitizeToken('a\rb')).toBeUndefined();
   });
   it('returns trimmed token when surrounding whitespace is stripped', () => {
     // sanitizeToken first trims, then rejects strings still containing whitespace.
