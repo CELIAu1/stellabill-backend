@@ -681,6 +681,19 @@ describe('createStellarBillClient - error paths (non-2xx)', () => {
       body: undefined,
     });
   });
+
+  it('non-2xx with unparseable JSON content returns undefined error body', async () => {
+    const { fetch } = mockFetchOnce('not-valid-json', { status: 502, contentType: 'application/json' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+    await expect(sdk.getHealth()).rejects.toMatchObject({
+      status: 502,
+      body: undefined,
+    });
+  });
 });
 
 describe('createStellarBillClient - warning path coverage', () => {
