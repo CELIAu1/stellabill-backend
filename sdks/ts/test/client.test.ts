@@ -705,6 +705,68 @@ describe('createStellarBillClient - typed wrappers (success paths)', () => {
 });
 
 describe('createStellarBillClient - error paths (non-2xx)', () => {
+  it.each([200, 299])('returns the SDK result envelope at the upper 2xx boundary (%i)', async (status) => {
+    const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' }, { status });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+
+    const result = await sdk.getHealth();
+
+    expect(result.status).toBe(status);
+    expect(result.data).toEqual({ status: 'ok', service: 'stellarbill-backend' });
+    expect(result.error).toBeUndefined();
+    expect(result.response.status).toBe(status);
+    expect(result.requestMethod).toBe('GET');
+    expect(result.requestUrl).toContain('/api/health');
+  });
+
+  it('returns the parsed error at the first non-2xx boundary when throwing is disabled', async () => {
+    const { fetch } = mockFetchOnce(
+      { error: 'Multiple Choices', message: 'redirect required', code: 'redirect_required' },
+      { status: 300 },
+    );
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+
+    const result = await sdk.getHealth();
+
+    expect(result.status).toBe(300);
+    expect(result.data).toBeUndefined();
+    expect(result.error).toEqual({
+      error: 'Multiple Choices',
+      message: 'redirect required',
+      code: 'redirect_required',
+    });
+    expect(result.response.status).toBe(300);
+  });
+
+  it('throws at the first non-2xx boundary when throwOnError is enabled', async () => {
+    const { fetch } = mockFetchOnce(
+      { error: 'Multiple Choices', message: 'redirect required', code: 'redirect_required' },
+      { status: 300 },
+    );
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+
+    await expect(sdk.getHealth()).rejects.toMatchObject({
+      name: 'StellarBillError',
+      status: 300,
+      body: {
+        error: 'Multiple Choices',
+        message: 'redirect required',
+        code: 'redirect_required',
+      },
+      requestMethod: 'GET',
+      requestUrl: '/api/health',
+      message: 'GET /api/health failed (300): redirect required',
+    });
+  });
+
   it('returns parsed error in result when not throwOnError', async () => {
     const { fetch } = mockFetchOnce(
       { error: 'Bad Request', message: 'Invalid cursor', code: 'invalid_cursor' },
