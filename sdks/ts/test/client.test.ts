@@ -909,6 +909,11 @@ describe('safeParseErrorBody', () => {
     expect(await safeParseErrorBody(r)).toBeUndefined();
   });
 
+  it('returns undefined when parsed value is a number', async () => {
+    const r = new Response('42', { status: 400, headers: { 'content-type': 'application/json' } });
+    expect(await safeParseErrorBody(r)).toBeUndefined();
+  });
+
   it('returns undefined when parsed value is an array', async () => {
     const r = new Response('[1,2,3]', { status: 400, headers: { 'content-type': 'application/json' } });
     expect(await safeParseErrorBody(r)).toBeUndefined();
