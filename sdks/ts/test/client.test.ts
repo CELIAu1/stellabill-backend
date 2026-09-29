@@ -564,6 +564,12 @@ describe('safeParseErrorBody', () => {
     vi.spyOn(r, 'text').mockRejectedValue(new Error('boom'));
     expect(await safeParseErrorBody(r)).toBeUndefined();
   });
+
+  it('parses correctly when res.text() resolves with valid input', async () => {
+    const r = new Response(null, { status: 400, headers: { 'content-type': 'application/json' } });
+    vi.spyOn(r, 'text').mockResolvedValue(JSON.stringify({ message: 'accepted input' }));
+    expect(await safeParseErrorBody(r)).toEqual({ message: 'accepted input' });
+  });
 });
 
 describe('Token integration with createStellarBillClient', () => {
