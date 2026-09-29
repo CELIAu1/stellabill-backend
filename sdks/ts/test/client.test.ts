@@ -1181,6 +1181,40 @@ describe('safeParseErrorBody', () => {
     expect(await safeParseErrorBody(r)).toEqual({ message: 'bad', code: 'x' });
   });
 
+  it('accepts application/json with a charset parameter and parses the body', async () => {
+    const r = new Response(JSON.stringify({ message: 'Invalid cursor', code: 'invalid_cursor' }), {
+      status: 400,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    });
+    expect(await safeParseErrorBody(r)).toEqual({
+      message: 'Invalid cursor',
+      code: 'invalid_cursor',
+    });
+  });
+
+  it('accepts parameterized application/json without whitespace and preserves all fields', async () => {
+    const r = new Response(
+      JSON.stringify({ error: 'Unprocessable Entity', message: 'nope', code: 'invalid_body' }),
+      {
+        status: 422,
+        headers: { 'content-type': 'application/json;charset=UTF-8' },
+      },
+    );
+    expect(await safeParseErrorBody(r)).toEqual({
+      error: 'Unprocessable Entity',
+      message: 'nope',
+      code: 'invalid_body',
+    });
+  });
+
+  it('rejects a non-JSON content-type even when the body is valid JSON', async () => {
+    const r = new Response(JSON.stringify({ message: 'should be ignored' }), {
+      status: 500,
+      headers: { 'content-type': 'application/xml; charset=utf-8' },
+    });
+    expect(await safeParseErrorBody(r)).toBeUndefined();
+  });
+
   it('returns undefined on invalid JSON', async () => {
     const r = new Response('not-json', { status: 400, headers: { 'content-type': 'application/json' } });
     expect(await safeParseErrorBody(r)).toBeUndefined();
