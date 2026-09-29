@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertOk,
   createStellarBillClient,
+  isLocalhost,
   safeParseErrorBody,
   StellarBillConfigError,
   StellarBillError,
@@ -1041,6 +1042,57 @@ describe('createStellarBillClient - error paths (non-2xx)', () => {
       status: 502,
       body: undefined,
     });
+  });
+});
+
+describe('isLocalhost accepted input (issue #881)', () => {
+  // --- Success paths: representative valid inputs accepted by the branch ---
+  it('returns true for the localhost hostname', () => {
+    expect(isLocalhost('http://localhost:8080/api')).toBe(true);
+  });
+
+  it('returns true for the 127.0.0.1 loopback address', () => {
+    expect(isLocalhost('http://127.0.0.1:8080')).toBe(true);
+  });
+
+  it('returns false for a remote hostname', () => {
+    expect(isLocalhost('https://api.stellabill.com')).toBe(false);
+  });
+
+  it('returns false for an IP that merely contains the loopback octets', () => {
+    // Boundary: "127.0.0.1" must match exactly, not as a substring.
+    expect(isLocalhost('http://127.0.0.10:8080')).toBe(false);
+    expect(isLocalhost('http://10.0.0.127:8080')).toBe(false);
+  });
+
+  it('returns false for a hostname that merely contains the word localhost', () => {
+    expect(isLocalhost('http://localhost.example.com:8080')).toBe(false);
+    expect(isLocalhost('http://notlocalhost:8080')).toBe(false);
+  });
+
+  it('is case-insensitive on hostnames (URL parsing normalizes the host)', () => {
+    expect(isLocalhost('http://LOCALHOST:8080')).toBe(true);
+    expect(isLocalhost('http://LocalHost')).toBe(true);
+  });
+
+  it('ignores port, path, query, and credentials', () => {
+    expect(isLocalhost('http://user:pass@localhost:9999/x?y=1')).toBe(true);
+    expect(isLocalhost('http://127.0.0.1/deep/path?x=1')).toBe(true);
+  });
+
+  it('checks the hostname regardless of scheme (WHATWG special schemes parse the same)', () => {
+    expect(isLocalhost('ftp://127.0.0.1')).toBe(true);
+    expect(isLocalhost('ws://localhost')).toBe(true);
+  });
+
+  // --- Failure path: the `return false` catch branch at client.ts:104 ---
+  it('returns false for a malformed URL instead of throwing', () => {
+    expect(isLocalhost('not-a-url')).toBe(false);
+  });
+
+  it('returns false for empty and whitespace-only inputs', () => {
+    expect(isLocalhost('')).toBe(false);
+    expect(isLocalhost('   ')).toBe(false);
   });
 });
 

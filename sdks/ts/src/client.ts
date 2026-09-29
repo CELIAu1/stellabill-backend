@@ -96,7 +96,11 @@ function validateBaseUrl(raw: unknown): string {
   return parsed.toString().replace(/\/+$/, '');
 }
 
-function isLocalhost(baseUrl: string): boolean {
+/**
+ * Whether a baseUrl points at localhost / 127.0.0.1. Malformed URLs return
+ * `false` (treated as non-localhost). Exported for testing only.
+ */
+export function isLocalhost(baseUrl: string): boolean {
   try {
     const u = new URL(baseUrl);
     return u.hostname === 'localhost' || u.hostname === '127.0.0.1';
