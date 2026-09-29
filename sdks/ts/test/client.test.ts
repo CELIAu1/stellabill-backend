@@ -91,13 +91,25 @@ afterEach(() => {
 });
 
 describe('createStellarBillClient - configuration', () => {
-  it('throws StellarBillConfigError on missing baseUrl', () => {
-    expect(() => createStellarBillClient({ baseUrl: undefined as unknown as string })).toThrow(
-      StellarBillConfigError,
-    );
-    expect(() => createStellarBillClient({ baseUrl: null as unknown as string })).toThrow(
-      /baseUrl is required/
-    );
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+  ])('rejects %s baseUrl with a stable config error', (_label, baseUrl) => {
+    let thrown: unknown;
+    try {
+      createStellarBillClient({ baseUrl: baseUrl as unknown as string });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(StellarBillConfigError);
+    expect(thrown).toMatchObject({
+      name: 'StellarBillConfigError',
+      message: 'baseUrl is required',
+    });
+  });
+
+  it('throws StellarBillConfigError on malformed baseUrl', () => {
     expect(() => createStellarBillClient({ baseUrl: 123 as unknown as string })).toThrow(
       /non-empty string/
     );
