@@ -420,6 +420,20 @@ describe('validateBaseUrl - boundary conditions for trailing slash stripping (li
 });
 
 describe('createStellarBillClient - headers and auth', () => {
+  it('accepts an undefined token and omits Authorization from requests', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: undefined,
+      fetch,
+    });
+
+    expect(sdk.getToken()).toBeUndefined();
+    await sdk.getHealth();
+
+    expect(callHeaders(calls[0]!)).not.toHaveProperty('authorization');
+  });
+
   it('injects Authorization Bearer header when token is set', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({
