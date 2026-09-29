@@ -510,6 +510,23 @@ describe('createStellarBillClient - headers and auth', () => {
     expect(callHeaders(calls[0]!)['authorization']).toBeUndefined();
   });
 
+  it('rejects non-string token input without storing or sending it', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      token: 123 as unknown as string,
+      fetch,
+    });
+    expect(sdk.getToken()).toBeUndefined();
+
+    const result = await sdk.getHealth();
+    expect(result.status).toBe(200);
+    expect(result.error).toBeUndefined();
+
+    const headers = callHeaders(calls[0]!);
+    expect(headers['authorization']).toBeUndefined();
+  });
+
   it('setToken rotates the token; subsequent calls use the new one', async () => {
     const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
     const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', token: 'old', fetch });
