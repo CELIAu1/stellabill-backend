@@ -99,6 +99,17 @@ describe('createStellarBillClient - configuration', () => {
     expect(() => createStellarBillClient({ baseUrl: 'not-a-url' })).toThrow(/not a valid URL/);
   });
 
+  it('accepts a valid baseUrl and resolves requests against it', async () => {
+    const { fetch, calls } = mockFetchOnce({ status: 'ok', service: 'stellabill-backend' });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+
+    const result = await sdk.getHealth();
+
+    expect(result.status).toBe(200);
+    expect(result.data).toEqual({ status: 'ok', service: 'stellabill-backend' });
+    expect(calls[0]!.url).toBe('https://api.example.com/api/health');
+  });
+
   it('warns when baseUrl is http and not localhost', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { fetch } = mockFetchOnce({ status: 'ok', service: 'stellarbill-backend' });
