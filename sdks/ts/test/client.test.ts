@@ -1394,6 +1394,88 @@ describe('safeParseErrorBody', () => {
   });
 });
 
+// Issue #897 — dedicated rejected-input coverage for the branch that ends in
+// `return parsed as ApiErrorBody;` (src/client.ts:116).
+//
+// Line 115's guard (`parsed && typeof parsed === 'object' && !Array.isArray(parsed)`)
+// is the only thing between an unchecked JSON.parse() result and the ApiErrorBody
+// contract this exported helper advertises. The suites above and in
+// client-safe-parse-error-body.test.ts already pin strings, arrays, null, plain
+// numbers and malformed JSON, so what remains unpinned is: booleans (truthy but
+// non-object), the falsy primitives that never reach the `typeof` clause at all,
+// and the fact that the guard is shallow rather than value-aware.
+describe('safeParseErrorBody - remaining guard clauses for client.ts:116', () => {
+  const json = (text: string): Response =>
+    new Response(text, { status: 400, headers: { 'content-type': 'application/json' } });
+
+  it('rejects a JSON boolean: truthy, but never satisfies `typeof parsed === "object"`', async () => {
+    expect(await safeParseErrorBody(json('true'))).toBeUndefined();
+  });
+
+  it('rejects falsy JSON primitives that short-circuit `parsed &&` before typeof runs', async () => {
+    // `false`, `0` and `""` are legal JSON values that the `typeof` and
+    // `Array.isArray` clauses would otherwise probe: the guard has to refuse
+    // them on truthiness alone, and the result must be indistinguishable from
+    // every other rejection (undefined, never a partial body).
+    expect(await safeParseErrorBody(json('false'))).toBeUndefined();
+    expect(await safeParseErrorBody(json('0'))).toBeUndefined();
+    expect(await safeParseErrorBody(json('""'))).toBeUndefined();
+  });
+
+  it('accepts an object with null field values — the guard only inspects the top level', async () => {
+    // Contrast with the rejected `null` payload above: null *values* inside an
+    // object still reach client.ts:116, so callers must be able to read them
+    // (and the SDK's message builder falls through them via `??`).
+    const parsed = await safeParseErrorBody(json('{"message":null,"code":null}'));
+    expect(parsed).toEqual({ message: null, code: null });
+    expect(parsed?.message ?? 'HTTP 400').toBe('HTTP 400');
+    expect(parsed?.code ?? 'unknown').toBe('unknown');
+  });
+});
+
+// The other half of the contract: what callers observe when the line 115/116
+// guard rejects the body. Rejection must never fabricate an ApiErrorBody —
+// `error` stays undefined and the message degrades to a stable `HTTP <status>`
+// while still identifying method, URL and status.
+describe('error contract for rejected response bodies (client.ts:115/116)', () => {
+  it('keeps `error` undefined, still exposes the response, and falls back to `HTTP <status>`', async () => {
+    // openapi-fetch JSON-parses every non-2xx body, so a bare JSON number is
+    // handed to the SDK as `error: 42`; the guard must refuse it instead of
+    // casting it into an ApiErrorBody.
+    const { fetch } = mockFetchOnce(42, { status: 400 });
+    const sdk = createStellarBillClient({ baseUrl: 'https://api.example.com', fetch });
+    const r = await sdk.getHealth();
+
+    expect(r.status).toBe(400);
+    expect(r.error).toBeUndefined();
+    expect(r.response).toBeInstanceOf(Response);
+    expect(r.response.status).toBe(400);
+
+    const err = (await assertOk(r).catch((e: unknown) => e)) as StellarBillError;
+    expect(err).toBeInstanceOf(StellarBillError);
+    expect(err.message).toBe('GET /api/health failed (400): HTTP 400');
+    expect(err.body).toBeUndefined();
+    expect(err.toString()).toContain('(unknown)');
+  });
+
+  it('throwOnError reports the same deterministic contract for a falsy body', async () => {
+    // `0` is refused by the `parsed &&` short-circuit, and openapi-fetch's own
+    // object check drops it first — either way no body may be invented.
+    const { fetch } = mockFetchOnce(0, { status: 500 });
+    const sdk = createStellarBillClient({
+      baseUrl: 'https://api.example.com',
+      throwOnError: true,
+      fetch,
+    });
+
+    const err = (await sdk.getHealth().catch((e: unknown) => e)) as StellarBillError;
+    expect(err).toBeInstanceOf(StellarBillError);
+    expect(err.status).toBe(500);
+    expect(err.body).toBeUndefined();
+    expect(err.message).toBe('GET /api/health failed (500): HTTP 500');
+  });
+});
+
 describe('Token integration with createStellarBillClient', () => {
   it('handles basic TokenHolder behavior via the SDK', async () => {
     const { fetch } = mockFetchOnce({});
